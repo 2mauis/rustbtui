@@ -8,6 +8,10 @@ on:
       - "v*"
   pull_request:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -87,3 +91,74 @@ jobs:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
           if-no-files-found: error
+
+      - name: Upload generic package
+        if: github.event_name == 'push'
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          FILE="${ARCHIVE_NAME}.tar.gz"
+          curl --fail --silent --show-error \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            --upload-file "${FILE}" \
+            "${GITHUB_SERVER_URL}/api/packages/${OWNER}/generic/rustbtui/${VERSION}/${FILE}"
+
+      - name: Attach archive to release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          OWNER="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+          FILE="${ARCHIVE_NAME}.tar.gz"
+          API_BASE="${GITHUB_SERVER_URL}/api/v1/repos/${OWNER}/${REPO}"
+          RELEASE_JSON="$(python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          api_base = os.environ["API_BASE"]
+          token = os.environ["GITEA_TOKEN"]
+          tag = os.environ["GITHUB_REF_NAME"]
+
+          def request(method, url, body=None):
+              headers = {
+                  "Accept": "application/json",
+                  "Authorization": f"token {token}",
+              }
+              data = None
+              if body is not None:
+                  headers["Content-Type"] = "application/json"
+                  data = json.dumps(body).encode("utf-8")
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode("utf-8"))
+
+          try:
+              payload = request("GET", f"{api_base}/releases/tags/{tag}")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              payload = request(
+                  "POST",
+                  f"{api_base}/releases",
+                  {
+                      "tag_name": tag,
+                      "name": tag,
+                      "draft": False,
+                      "prerelease": False,
+                  },
+              )
+
+          print(json.dumps(payload))
+          PY
+          )"
+          RELEASE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"${RELEASE_JSON}")"
+          curl --fail --silent --show-error \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -F "attachment=@${FILE}" \
+            "${API_BASE}/releases/${RELEASE_ID}/assets?name=${FILE}"
