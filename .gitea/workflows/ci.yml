@@ -93,9 +93,10 @@ jobs:
           if-no-files-found: error
 
       - name: Upload generic package
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && secrets.GITEA_PACKAGE_TOKEN != ''
         env:
-          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Gitea package publishing requires a PAT; the built-in Actions token does not have package auth.
+          GITEA_TOKEN: ${{ secrets.GITEA_PACKAGE_TOKEN }}
         shell: bash
         run: |
           OWNER="${GITHUB_REPOSITORY%/*}"
