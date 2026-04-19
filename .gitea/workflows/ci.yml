@@ -17,15 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: http://192.168.32.43:8300/actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: http://192.168.32.43:8300/dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: http://192.168.32.43:8300/Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --check
@@ -51,15 +51,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: http://192.168.32.43:8300/actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: http://192.168.32.43:8300/dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
 
       - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: http://192.168.32.43:8300/Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
@@ -86,7 +86,7 @@ jobs:
           tar -C dist -czf "${ARCHIVE_NAME}.tar.gz" rustbtui README.md Cargo.toml
 
       - name: Upload package artifact
-        uses: christopherhx/gitea-upload-artifact@v4
+        uses: http://192.168.32.43:8300/christopherhx/gitea-upload-artifact@v4
         with:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.tar.gz
