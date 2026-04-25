@@ -15,5 +15,6 @@ cargo run
 - `Tab`: switch the right-hand view
 - `Space`: cycle selected task through `idle -> running -> done`
 - `a`: append a synthetic event
+- `x`: inject a simulated bad event such as an `unwrap()` panic or vulnerability alert
 - `r`: reset the dashboard
 - `q` / `Esc`: quit
