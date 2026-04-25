@@ -405,7 +405,8 @@ impl App {
                 false
             }
             KeyCode::Char('x') => {
-                self.push_log(self.next_incident());
+                let incident = self.next_incident();
+                self.push_log(incident);
                 false
             }
             KeyCode::Char('r') => {
