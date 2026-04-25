@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-pub(crate) struct DemoCredential {
-    pub(crate) username: &'static str,
-    pub(crate) password: &'static str,
-}
+// Intentional CodeQL demonstration fixture on an isolated validation branch.
+// This is a controlled hardcoded-password example kept outside the runtime path.
+pub(crate) const CODEQL_DEMO_PASSWORD: &str = "CodeQL-demo-password-123!";
 
-pub(crate) const CODEQL_DEMO_CREDENTIAL: DemoCredential = DemoCredential {
-    username: "demo-user",
-    password: "CodeQL-demo-password-123!",
-};
+#[allow(clippy::let_and_return)]
+pub(crate) fn constant_password_example() -> &'static str {
+    let password = CODEQL_DEMO_PASSWORD;
+    password
+}
