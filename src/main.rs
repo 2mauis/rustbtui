@@ -784,10 +784,7 @@ mod tests {
             app.push_log(format!("log {i}"));
         }
         // The last entry should be the most-recently pushed one.
-        assert_eq!(
-            app.logs.last().unwrap(),
-            &format!("log {}", MAX_LOGS + 2)
-        );
+        assert_eq!(app.logs.last().unwrap(), &format!("log {}", MAX_LOGS + 2));
     }
 
     // ── App::reset ─────────────────────────────────────────────────────────────
@@ -854,10 +851,11 @@ mod tests {
         for _ in 0..30 {
             app.on_tick();
         }
-        assert!(app
-            .logs
-            .iter()
-            .any(|l| l.contains("tick: 30 cycles elapsed")));
+        assert!(
+            app.logs
+                .iter()
+                .any(|l| l.contains("tick: 30 cycles elapsed"))
+        );
     }
 
     #[test]
