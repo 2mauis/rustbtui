@@ -250,6 +250,7 @@ fn draw_metrics(frame: &mut Frame, area: Rect, app: &App) {
         Line::from("Use `space` to cycle task state."),
         Line::from("Use `Tab` to switch the right-hand view."),
         Line::from("Use `a` to append a synthetic activity event."),
+        Line::from("Use `x` to inject a simulated bad event."),
         Line::from("Use `r` to reset the board."),
     ])
     .block(
@@ -306,7 +307,7 @@ where
 fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
     let footer = Paragraph::new(vec![
         Line::from(
-            "q quit   j/k move   space cycle state   tab switch view   a add event   r reset",
+            "q quit   j/k move   space cycle state   tab switch view   a add event   x bad event   r reset",
         ),
         Line::from(app.status_line()),
     ])
@@ -321,6 +322,7 @@ struct App {
     ticks: u64,
     history: Vec<u64>,
     logs: Vec<String>,
+    incident_index: usize,
 }
 
 impl App {
@@ -361,6 +363,7 @@ impl App {
                 "boot: ratatui dashboard initialized".to_string(),
                 "hint: press Tab to switch views".to_string(),
             ],
+            incident_index: 0,
         }
     }
 
@@ -399,6 +402,10 @@ impl App {
                     "event: heartbeat accepted for {}",
                     self.current_item().name
                 ));
+                false
+            }
+            KeyCode::Char('x') => {
+                self.push_log(self.next_incident());
                 false
             }
             KeyCode::Char('r') => {
@@ -457,12 +464,24 @@ impl App {
     fn reset(&mut self) {
         self.ticks = 0;
         self.mode = AppMode::Overview;
+        self.incident_index = 0;
         self.history.fill(12);
         for item in &mut self.items {
             item.state = TaskState::Idle;
         }
         self.logs.clear();
         self.push_log("reset: dashboard state restored".to_string());
+    }
+
+    fn next_incident(&mut self) -> String {
+        let name = self.current_item().name.clone();
+        let message = match self.incident_index % 3 {
+            0 => format!("incident: unwrap() panic simulated in {name}"),
+            1 => format!("incident: vulnerability alert simulated for {name}"),
+            _ => format!("incident: stalled worker simulated for {name}"),
+        };
+        self.incident_index += 1;
+        message
     }
 
     fn status_line(&self) -> String {
@@ -662,6 +681,7 @@ mod tests {
         assert_eq!(app.ticks, 0);
         assert_eq!(app.history.len(), HISTORY_LEN);
         assert_eq!(app.logs.len(), 2);
+        assert_eq!(app.incident_index, 0);
     }
 
     // ── App counters ───────────────────────────────────────────────────────────
@@ -776,6 +796,7 @@ mod tests {
         let mut app = App::new();
         app.ticks = 50;
         app.mode = AppMode::Events;
+        app.incident_index = 2;
         app.items[0].state = TaskState::Done;
         app.history[0] = 99;
 
@@ -786,6 +807,7 @@ mod tests {
         assert!(app.items.iter().all(|i| matches!(i.state, TaskState::Idle)));
         assert!(app.history.iter().all(|&v| v == 12));
         assert_eq!(app.logs.len(), 1);
+        assert_eq!(app.incident_index, 0);
         assert_eq!(app.logs[0], "reset: dashboard state restored");
     }
 
@@ -938,6 +960,26 @@ mod tests {
         app.handle_key(KeyCode::Char('a'));
         assert_eq!(app.logs.len(), before_len + 1);
         assert!(app.logs.last().unwrap().contains("heartbeat"));
+    }
+
+    #[test]
+    fn handle_key_x_appends_bad_event_log() {
+        let mut app = App::new();
+        let before_len = app.logs.len();
+        app.handle_key(KeyCode::Char('x'));
+        assert_eq!(app.logs.len(), before_len + 1);
+        assert!(app.logs.last().unwrap().contains("unwrap()"));
+    }
+
+    #[test]
+    fn handle_key_x_cycles_bad_event_messages() {
+        let mut app = App::new();
+        app.logs.clear();
+        app.handle_key(KeyCode::Char('x'));
+        app.handle_key(KeyCode::Char('x'));
+
+        assert!(app.logs[0].contains("unwrap()"));
+        assert!(app.logs[1].contains("vulnerability"));
     }
 
     #[test]
