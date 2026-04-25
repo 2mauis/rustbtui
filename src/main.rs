@@ -557,3 +557,424 @@ impl TaskState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::KeyCode;
+
+    use super::*;
+
+    // ── TaskState ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn task_state_label_idle() {
+        assert_eq!(TaskState::Idle.label(), "idle");
+    }
+
+    #[test]
+    fn task_state_label_running() {
+        assert_eq!(TaskState::Running.label(), "running");
+    }
+
+    #[test]
+    fn task_state_label_done() {
+        assert_eq!(TaskState::Done.label(), "done");
+    }
+
+    // ── Item ───────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn item_new_creates_correctly() {
+        let item = Item::new("TestName", "TestFocus", "Test description");
+        assert_eq!(item.name, "TestName");
+        assert_eq!(item.focus, "TestFocus");
+        assert_eq!(item.description, "Test description");
+        assert!(matches!(item.state, TaskState::Idle));
+    }
+
+    #[test]
+    fn item_cycle_state_idle_to_running() {
+        let mut item = Item::new("T", "F", "D");
+        item.cycle_state();
+        assert!(matches!(item.state, TaskState::Running));
+    }
+
+    #[test]
+    fn item_cycle_state_running_to_done() {
+        let mut item = Item::new("T", "F", "D");
+        item.state = TaskState::Running;
+        item.cycle_state();
+        assert!(matches!(item.state, TaskState::Done));
+    }
+
+    #[test]
+    fn item_cycle_state_done_to_idle() {
+        let mut item = Item::new("T", "F", "D");
+        item.state = TaskState::Done;
+        item.cycle_state();
+        assert!(matches!(item.state, TaskState::Idle));
+    }
+
+    // ── AppMode ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_mode_next_overview_to_metrics() {
+        assert!(matches!(AppMode::Overview.next(), AppMode::Metrics));
+    }
+
+    #[test]
+    fn app_mode_next_metrics_to_events() {
+        assert!(matches!(AppMode::Metrics.next(), AppMode::Events));
+    }
+
+    #[test]
+    fn app_mode_next_events_to_overview() {
+        assert!(matches!(AppMode::Events.next(), AppMode::Overview));
+    }
+
+    #[test]
+    fn app_mode_index() {
+        assert_eq!(AppMode::Overview.index(), 0);
+        assert_eq!(AppMode::Metrics.index(), 1);
+        assert_eq!(AppMode::Events.index(), 2);
+    }
+
+    #[test]
+    fn app_mode_label() {
+        assert_eq!(AppMode::Overview.label(), "overview");
+        assert_eq!(AppMode::Metrics.label(), "metrics");
+        assert_eq!(AppMode::Events.label(), "events");
+    }
+
+    #[test]
+    fn app_mode_titles_count() {
+        assert_eq!(AppMode::titles().len(), 3);
+    }
+
+    // ── App::new ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_new_defaults() {
+        let app = App::new();
+        assert_eq!(app.items.len(), 5);
+        assert_eq!(app.selected, 0);
+        assert!(matches!(app.mode, AppMode::Overview));
+        assert_eq!(app.ticks, 0);
+        assert_eq!(app.history.len(), HISTORY_LEN);
+        assert_eq!(app.logs.len(), 2);
+    }
+
+    // ── App counters ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_done_count_initially_zero() {
+        let app = App::new();
+        assert_eq!(app.done_count(), 0);
+    }
+
+    #[test]
+    fn app_running_count_initially_zero() {
+        let app = App::new();
+        assert_eq!(app.running_count(), 0);
+    }
+
+    #[test]
+    fn app_done_count_after_setting_states() {
+        let mut app = App::new();
+        app.items[0].state = TaskState::Done;
+        app.items[2].state = TaskState::Done;
+        assert_eq!(app.done_count(), 2);
+    }
+
+    #[test]
+    fn app_running_count_after_setting_states() {
+        let mut app = App::new();
+        app.items[1].state = TaskState::Running;
+        app.items[3].state = TaskState::Running;
+        assert_eq!(app.running_count(), 2);
+    }
+
+    // ── App::progress ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_progress_zero_when_no_done() {
+        let app = App::new();
+        assert_eq!(app.progress(), 0);
+    }
+
+    #[test]
+    fn app_progress_100_when_all_done() {
+        let mut app = App::new();
+        for item in &mut app.items {
+            item.state = TaskState::Done;
+        }
+        assert_eq!(app.progress(), 100);
+    }
+
+    #[test]
+    fn app_progress_partial() {
+        let mut app = App::new();
+        // 2 out of 5 done = 40%
+        app.items[0].state = TaskState::Done;
+        app.items[1].state = TaskState::Done;
+        assert_eq!(app.progress(), 40);
+    }
+
+    // ── App::current_item ──────────────────────────────────────────────────────
+
+    #[test]
+    fn app_current_item_returns_selected() {
+        let app = App::new();
+        assert_eq!(app.current_item().name, app.items[0].name);
+    }
+
+    #[test]
+    fn app_current_item_after_selection_change() {
+        let mut app = App::new();
+        app.selected = 3;
+        assert_eq!(app.current_item().name, app.items[3].name);
+    }
+
+    // ── App::push_log ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_push_log_appends_entry() {
+        let mut app = App::new();
+        let initial_len = app.logs.len();
+        app.push_log("test event".to_string());
+        assert_eq!(app.logs.len(), initial_len + 1);
+        assert_eq!(app.logs.last().unwrap(), "test event");
+    }
+
+    #[test]
+    fn app_push_log_truncates_to_max_logs() {
+        let mut app = App::new();
+        for i in 0..MAX_LOGS + 5 {
+            app.push_log(format!("log {i}"));
+        }
+        assert_eq!(app.logs.len(), MAX_LOGS);
+    }
+
+    #[test]
+    fn app_push_log_keeps_newest_entries() {
+        let mut app = App::new();
+        app.logs.clear();
+        for i in 0..MAX_LOGS + 3 {
+            app.push_log(format!("log {i}"));
+        }
+        // The last entry should be the most-recently pushed one.
+        assert_eq!(
+            app.logs.last().unwrap(),
+            &format!("log {}", MAX_LOGS + 2)
+        );
+    }
+
+    // ── App::reset ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn app_reset_clears_state() {
+        let mut app = App::new();
+        app.ticks = 50;
+        app.mode = AppMode::Events;
+        app.items[0].state = TaskState::Done;
+        app.history[0] = 99;
+
+        app.reset();
+
+        assert_eq!(app.ticks, 0);
+        assert!(matches!(app.mode, AppMode::Overview));
+        assert!(app.items.iter().all(|i| matches!(i.state, TaskState::Idle)));
+        assert!(app.history.iter().all(|&v| v == 12));
+        assert_eq!(app.logs.len(), 1);
+        assert_eq!(app.logs[0], "reset: dashboard state restored");
+    }
+
+    // ── App::status_line ───────────────────────────────────────────────────────
+
+    #[test]
+    fn app_status_line_all_idle() {
+        let app = App::new();
+        assert_eq!(app.status_line(), "0 done, 0 running, 5 total");
+    }
+
+    #[test]
+    fn app_status_line_with_mixed_states() {
+        let mut app = App::new();
+        app.items[0].state = TaskState::Done;
+        app.items[1].state = TaskState::Running;
+        assert_eq!(app.status_line(), "1 done, 1 running, 5 total");
+    }
+
+    // ── App::on_tick ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn on_tick_increments_ticks() {
+        let mut app = App::new();
+        app.on_tick();
+        assert_eq!(app.ticks, 1);
+    }
+
+    #[test]
+    fn on_tick_updates_history_last_slot() {
+        let mut app = App::new();
+        app.history.fill(0);
+        app.on_tick();
+        // After rotate_left(1) and writing the new value the last slot holds
+        // the freshly computed value, which must be >= 8.
+        assert!(*app.history.last().unwrap() >= 8);
+    }
+
+    #[test]
+    fn on_tick_logs_at_multiple_of_30() {
+        let mut app = App::new();
+        app.logs.clear();
+        for _ in 0..30 {
+            app.on_tick();
+        }
+        assert!(app
+            .logs
+            .iter()
+            .any(|l| l.contains("tick: 30 cycles elapsed")));
+    }
+
+    #[test]
+    fn on_tick_does_not_log_before_multiple_of_30() {
+        let mut app = App::new();
+        app.logs.clear();
+        for _ in 0..29 {
+            app.on_tick();
+        }
+        assert!(app.logs.is_empty());
+    }
+
+    // ── App::handle_key ────────────────────────────────────────────────────────
+
+    #[test]
+    fn handle_key_q_signals_quit() {
+        let mut app = App::new();
+        assert!(app.handle_key(KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn handle_key_esc_signals_quit() {
+        let mut app = App::new();
+        assert!(app.handle_key(KeyCode::Esc));
+    }
+
+    #[test]
+    fn handle_key_j_moves_selection_down() {
+        let mut app = App::new();
+        assert!(!app.handle_key(KeyCode::Char('j')));
+        assert_eq!(app.selected, 1);
+    }
+
+    #[test]
+    fn handle_key_down_moves_selection_down() {
+        let mut app = App::new();
+        assert!(!app.handle_key(KeyCode::Down));
+        assert_eq!(app.selected, 1);
+    }
+
+    #[test]
+    fn handle_key_j_wraps_at_bottom() {
+        let mut app = App::new();
+        app.selected = app.items.len() - 1;
+        app.handle_key(KeyCode::Char('j'));
+        assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn handle_key_k_moves_selection_up() {
+        let mut app = App::new();
+        app.selected = 2;
+        assert!(!app.handle_key(KeyCode::Char('k')));
+        assert_eq!(app.selected, 1);
+    }
+
+    #[test]
+    fn handle_key_up_moves_selection_up() {
+        let mut app = App::new();
+        app.selected = 2;
+        assert!(!app.handle_key(KeyCode::Up));
+        assert_eq!(app.selected, 1);
+    }
+
+    #[test]
+    fn handle_key_k_wraps_at_top() {
+        let mut app = App::new();
+        app.selected = 0;
+        app.handle_key(KeyCode::Char('k'));
+        assert_eq!(app.selected, app.items.len() - 1);
+    }
+
+    #[test]
+    fn handle_key_tab_cycles_through_all_modes() {
+        let mut app = App::new();
+        assert!(matches!(app.mode, AppMode::Overview));
+        app.handle_key(KeyCode::Tab);
+        assert!(matches!(app.mode, AppMode::Metrics));
+        app.handle_key(KeyCode::Tab);
+        assert!(matches!(app.mode, AppMode::Events));
+        app.handle_key(KeyCode::Tab);
+        assert!(matches!(app.mode, AppMode::Overview));
+    }
+
+    #[test]
+    fn handle_key_space_cycles_task_state() {
+        let mut app = App::new();
+        assert!(matches!(app.items[0].state, TaskState::Idle));
+        app.handle_key(KeyCode::Char(' '));
+        assert!(matches!(app.items[0].state, TaskState::Running));
+        app.handle_key(KeyCode::Char(' '));
+        assert!(matches!(app.items[0].state, TaskState::Done));
+        app.handle_key(KeyCode::Char(' '));
+        assert!(matches!(app.items[0].state, TaskState::Idle));
+    }
+
+    #[test]
+    fn handle_key_a_appends_heartbeat_log() {
+        let mut app = App::new();
+        let before_len = app.logs.len();
+        app.handle_key(KeyCode::Char('a'));
+        assert_eq!(app.logs.len(), before_len + 1);
+        assert!(app.logs.last().unwrap().contains("heartbeat"));
+    }
+
+    #[test]
+    fn handle_key_r_resets_app() {
+        let mut app = App::new();
+        app.ticks = 100;
+        app.handle_key(KeyCode::Char('r'));
+        assert_eq!(app.ticks, 0);
+    }
+
+    #[test]
+    fn handle_key_unknown_does_not_quit() {
+        let mut app = App::new();
+        assert!(!app.handle_key(KeyCode::F(1)));
+    }
+
+    #[test]
+    fn handle_key_navigation_logs_cursor_event() {
+        let mut app = App::new();
+        app.logs.clear();
+        app.handle_key(KeyCode::Char('j'));
+        assert!(app.logs.iter().any(|l| l.starts_with("cursor:")));
+    }
+
+    #[test]
+    fn handle_key_tab_logs_view_change() {
+        let mut app = App::new();
+        app.logs.clear();
+        app.handle_key(KeyCode::Tab);
+        assert!(app.logs.iter().any(|l| l.starts_with("view:")));
+    }
+
+    #[test]
+    fn handle_key_space_logs_task_state_change() {
+        let mut app = App::new();
+        app.logs.clear();
+        app.handle_key(KeyCode::Char(' '));
+        assert!(app.logs.iter().any(|l| l.starts_with("task:")));
+    }
+}
