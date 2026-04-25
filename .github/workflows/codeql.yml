@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - copilot/test-codeql-security-issues
   pull_request:
     branches:
       - main

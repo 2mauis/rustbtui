@@ -1,3 +1,5 @@
+mod codeql_demo;
+
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
