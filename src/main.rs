@@ -997,6 +997,33 @@ mod tests {
         assert!(!app.handle_key(KeyCode::F(1)));
     }
 
+    // ── File descriptor leak check (Linux only) ────────────────────────────────
+
+    /// Returns the number of file descriptors currently open in this process by
+    /// counting entries under `/proc/self/fd`.  The `read_dir` call itself opens
+    /// a temporary fd that is included in the count and closed before returning,
+    /// so two consecutive calls return the same value when no fd is leaked.
+    #[cfg(target_os = "linux")]
+    fn count_open_fds() -> usize {
+        std::fs::read_dir("/proc/self/fd")
+            .expect("failed to read /proc/self/fd")
+            .count()
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn fd_leak_file_open_close() {
+        let before = count_open_fds();
+        {
+            let _f = std::fs::File::open("/dev/null").expect("open /dev/null");
+        }
+        let after = count_open_fds();
+        assert_eq!(
+            after, before,
+            "file descriptor leak detected: before={before} after={after}"
+        );
+    }
+
     #[test]
     fn handle_key_navigation_logs_cursor_event() {
         let mut app = App::new();
