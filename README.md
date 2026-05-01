@@ -18,3 +18,10 @@ cargo run
 - `x`: inject a simulated bad event such as an `unwrap()` panic or vulnerability alert
 - `r`: reset the dashboard
 - `q` / `Esc`: quit
+
+
+## Test
+
+```bash
+cargo test
+```
